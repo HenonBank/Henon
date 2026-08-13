@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - VIBE-CODE</title>
+    <style>
+        :root {
+            --bg0: #0b0d14;
+            --bg1: #111320;
+            --bg2: #171a2e;
+            --bg3: #1e2240;
+            --border: rgba(99,120,255,.18);
+            --accent: #6378ff;
+            --accent2: #a259ff;
+            --text: #e8eaf6;
+            --text2: #8891c0;
+            --green: #22d97a;
+            --red: #ff4d6d;
+            --yellow: #ffcc00;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg0);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 30px;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .card {
+            background: var(--bg1);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        .card h2 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: var(--text);
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text2);
+            margin-bottom: 8px;
+        }
+        input[type="text"],
+        input[type="number"],
+        input[type="email"],
+        select {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: inherit;
+        }
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        button {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: .2s;
+        }
+        button:hover {
+            opacity: .88;
+            transform: translateY(-1px);
+        }
+        .btn-danger {
+            background: linear-gradient(135deg, var(--red), #ff6b8a);
+        }
+        .user-list {
+            margin-top: 20px;
+        }
+        .user-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px;
+            background: var(--bg2);
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+        .user-info {
+            flex: 1;
+        }
+        .user-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .user-email {
+            font-size: 12px;
+            color: var(--text2);
+        }
+        .user-status {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+        .status-active {
+            background: rgba(34, 217, 122, .15);
+            color: var(--green);
+        }
+        .status-blocked {
+            background: rgba(255, 77, 109, .15);
+            color: var(--red);
+        }
+        .user-balance {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent);
+            margin-right: 12px;
+        }
+        .user-actions {
+            display: flex;
+            gap: 8px;
+        }
+        .user-actions button {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background: var(--bg2);
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+        .stat-label {
+            font-size: 12px;
+            color: var(--text2);
+            margin-top: 4px;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: var(--text2);
+            text-decoration: none;
+            font-size: 13px;
+        }
+        .back-link:hover {
+            color: var(--accent);
+        }
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 14px 20px;
+            background: var(--bg3);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            transform: translateX(400px);
+            transition: transform .3s ease;
+            z-index: 1000;
+        }
+        .notification.show {
+            transform: translateX(0);
+        }
+        .notification.success {
+            border-color: var(--green);
+        }
+        .notification.error {
+            border-color: var(--red);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="index.html" class="back-link">← Back to Main App</a>
+        
+        <h1>🔧 Admin Panel</h1>
+        
+        <!-- Stats Overview -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-users">0</div>
+                <div class="stat-label">Total Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-active">0</div>
+                <div class="stat-label">Active Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-blocked">0</div>
+                <div class="stat-label">Blocked Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-revenue">$0</div>
+                <div class="stat-label">Total Revenue</div>
+            </div>
+        </div>
+        
+        <!-- Add/Edit User Form -->
+        <div class="card">
+            <h2 id="form-title">Add New User</h2>
+            <form id="userForm">
+                <input type="hidden" id="user-id">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required placeholder="Enter username">
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required placeholder="Enter email">
+                </div>
+                
+                <div class="form-group">
+                    <label for="balance">Balance ($)</label>
+                    <input type="number" id="balance" name="balance" step="0.01" min="0" value="0" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="status">Status</label>
+                    <select id="status" name="status">
+                        <option value="active">Active</option>
+                        <option value="blocked">Blocked</option>
+                    </select>
+                </div>
+                
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit" id="save-btn">Save User</button>
+                    <button type="button" id="cancel-btn" style="display:none;background:var(--bg3)" onclick="resetForm()">Cancel</button>
+                </div>
+            </form>
+        </div>
+        
+        <!-- User List -->
+        <div class="card">
+            <h2>User Management</h2>
+            <div class="user-list" id="user-list">
+                <!-- Users will be loaded here -->
+            </div>
+        </div>
+    </div>
+    
+    <div class="notification" id="notification"></div>
+    
+    <script>
+        // In-memory user storage (replace with backend API calls)
+        let users = [
+            { id: 1, username: 'admin', email: 'admin@vibecode.com', balance: 100.00, status: 'active' },
+            { id: 2, username: 'testuser', email: 'test@example.com', balance: 25.50, status: 'active' },
+            { id: 3, username: 'blockeduser', email: 'blocked@example.com', balance: 0.00, status: 'blocked' }
+        ];
+        
+        let editingId = null;
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUsers();
+            updateStats();
+        });
+        
+        // Form submission
+        document.getElementById('userForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const balance = parseFloat(document.getElementById('balance').value) || 0;
+            const status = document.getElementById('status').value;
+            
+            if (editingId) {
+                // Update existing user
+                const userIndex = users.findIndex(u => u.id === editingId);
+                if (userIndex !== -1) {
+                    users[userIndex] = { ...users[userIndex], username, email, balance, status };
+                    showNotification('User updated successfully!', 'success');
+                }
+            } else {
+                // Add new user
+                const newId = users.length > 0 ? Math.max(...users.map(u => u.id)) + 1 : 1;
+                users.push({ id: newId, username, email, balance, status });
+                showNotification('User added successfully!', 'success');
+            }
+            
+            resetForm();
+            loadUsers();
+            updateStats();
+        });
+        
+        // Load users list
+        function loadUsers() {
+            const userList = document.getElementById('user-list');
+            userList.innerHTML = '';
+            
+            if (users.length === 0) {
+                userList.innerHTML = '<p style="color:var(--text2);text-align:center;padding:20px">No users found</p>';
+                return;
+            }
+            
+            users.forEach(user => {
+                const userItem = document.createElement('div');
+                userItem.className = 'user-item';
+                userItem.innerHTML = `
+                    <div class="user-info">
+                        <div class="user-name">${escapeHtml(user.username)}</div>
+                        <div class="user-email">${escapeHtml(user.email)}</div>
+                    </div>
+                    <span class="user-status ${user.status === 'active' ? 'status-active' : 'status-blocked'}">
+                        ${user.status}
+                    </span>
+                    <div class="user-balance">$${user.balance.toFixed(2)}</div>
+                    <div class="user-actions">
+                        <button onclick="editUser(${user.id})">Edit</button>
+                        <button class="btn-danger" onclick="deleteUser(${user.id})">Delete</button>
+                    </div>
+                `;
+                userList.appendChild(userItem);
+            });
+        }
+        
+        // Edit user
+        function editUser(id) {
+            const user = users.find(u => u.id === id);
+            if (!user) return;
+            
+            editingId = id;
+            document.getElementById('user-id').value = user.id;
+            document.getElementById('username').value = user.username;
+            document.getElementById('email').value = user.email;
+            document.getElementById('balance').value = user.balance;
+            document.getElementById('status').value = user.status;
+            
+            document.getElementById('form-title').textContent = 'Edit User';
+            document.getElementById('save-btn').textContent = 'Update User';
+            document.getElementById('cancel-btn').style.display = 'inline-block';
+            
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        
+        // Delete user
+        function deleteUser(id) {
+            if (!confirm('Are you sure you want to delete this user?')) return;
+            
+            users = users.filter(u => u.id !== id);
+            showNotification('User deleted successfully!', 'success');
+            
+            if (editingId === id) {
+                resetForm();
+            }
+            
+            loadUsers();
+            updateStats();
+        }
+        
+        // Reset form
+        function resetForm() {
+            editingId = null;
+            document.getElementById('userForm').reset();
+            document.getElementById('user-id').value = '';
+            document.getElementById('form-title').textContent = 'Add New User';
+            document.getElementById('save-btn').textContent = 'Save User';
+            document.getElementById('cancel-btn').style.display = 'none';
+        }
+        
+        // Update statistics
+        function updateStats() {
+            document.getElementById('stat-users').textContent = users.length;
+            document.getElementById('stat-active').textContent = users.filter(u => u.status === 'active').length;
+            document.getElementById('stat-blocked').textContent = users.filter(u => u.status === 'blocked').length;
+            const totalRevenue = users.reduce((sum, u) => sum + u.balance, 0);
+            document.getElementById('stat-revenue').textContent = '$' + totalRevenue.toFixed(2);
+        }
+        
+        // Show notification
+        function showNotification(message, type = '') {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = 'notification show ' + type;
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+        
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

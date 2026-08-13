@@ -1,0 +1,9 @@
+  type: "text-generation"
+  parameters:
+    max_tokens: 1024
+    temperature: 0.2
+    top_p: 0.95
+    stream: true
+    stop_sequences:
+      - "\n\n"
+

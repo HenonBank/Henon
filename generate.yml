@@ -1,0 +1,409 @@
+name: VIBE-CODE Generate + Storage
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'What to build / fix / improve'
+        required: true
+        default: ''
+      file_name:
+        description: 'Output filename (e.g. main.py)'
+        default: 'output.py'
+      mode:
+        description: 'generate | improve'
+        default: 'generate'
+        type: choice
+        options: [generate, improve]
+      agent_mode:
+        description: 'Agent mode: single | multi'
+        default: 'single'
+        type: choice
+        options: [single, multi]
+      enable_tools:
+        description: 'Enable internet API tools (ToolRouter)'
+        default: 'true'
+        type: choice
+        options: ['true', 'false']
+      target_repo:
+        description: 'Repo to read context from (owner/repo, empty = skip)'
+        default: ''
+      model_planner:
+        description: 'Planner model (multi-agent)'
+        default: 'qwen2.5:7b'
+      model_coder:
+        description: 'Coder model (multi-agent)'
+        default: 'bonsai-27b'
+      model_single:
+        description: 'Single-agent model'
+        default: 'qwen2.5-coder:7b'
+      max_tokens:
+        description: 'Max tokens per model call'
+        default: '4096'
+      iterations:
+        description: 'Iterations (single-agent)'
+        default: '1'
+      total_budget:
+        description: 'Total token budget (0 = unlimited)'
+        default: '0'
+      uncensored:
+        description: 'Uncensored mode (no content refusals + security audit)'
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+      auto_pr:
+        description: '(deprecated — use pr.yaml workflow instead)'
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+      auto_notes:
+        description: 'Generate release notes'
+        default: 'true'
+        type: choice
+        options: ['false', 'true']
+      storage_repo:
+        description: 'Private repo with chats & keys'
+        default: 'B3B3097/Storage-VIBE-CODE'
+      secrets_repo:
+        description: '(deprecated — keys now live in storage)'
+        default: ''
+      secrets_path:
+        description: '(deprecated)'
+        default: 'vibe/secrets.env'
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  OLLAMA_HOST: http://127.0.0.1:11434
+  OUTPUT_DIR: /tmp/vibe_output
+  STORAGE_DIR: /tmp/storage
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+
+      # ══ 1. CHECKOUT ══════════════════════════════════════════════════════
+      - name: Checkout VIBE-CODE
+        uses: actions/checkout@v5
+
+      # ══ 2. SYSTEM INFO ═══════════════════════════════════════════════════
+      - name: System info
+        run: |
+          echo "CPU : $(nproc) cores | RAM: $(free -h | awk '/^Mem/{print $2}')"
+          echo "Mode: ${{ inputs.agent_mode }} | Tools: ${{ inputs.enable_tools }}"
+          echo "Prompt: ${{ inputs.prompt }}"
+
+      # ══ 3. RESOLVE TOKEN (GH → GH_PAT → GITHUB_TOKEN) ═════════════════════
+      - name: Resolve GitHub token
+        id: token
+        env:
+          GH: ${{ secrets.GH }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -n "$GH" ]; then
+            echo "token=$GH" >> "$GITHUB_OUTPUT"; echo "🔑 GH"
+          elif [ -n "$GH_PAT" ]; then
+            echo "token=$GH_PAT" >> "$GITHUB_OUTPUT"; echo "🔑 GH_PAT"
+          else
+            echo "token=${{ secrets.GITHUB_TOKEN }}" >> "$GITHUB_OUTPUT"; echo "🔑 GITHUB_TOKEN"
+          fi
+
+      # ══ 4. STORAGE: PULL (чаты + ключи из приватного репо) ════════════════
+      - name: Pull storage repo
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          STORAGE_REPO: ${{ inputs.storage_repo }}
+        run: |
+          mkdir -p "$STORAGE_DIR"
+          python3 sync_storage.py pull && echo "✅ Storage pulled" \
+            || echo "⚠️ Storage pull failed — continuing without it"
+
+      # ══ 5. STORAGE: MIGRATE (идемпотентно, только первый запуск) ══════════
+      - name: Migrate old data (first run only)
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          STORAGE_REPO: ${{ inputs.storage_repo }}
+          SOURCE_REPO: B3B3097/VIBE-CODE
+        run: |
+          python3 sync_storage.py migrate || echo "⚠️ migrate failed (non-fatal)"
+
+      # ══ 6. KEYS: из storage; если пусто — авто-импорт из Actions secrets ══
+      - name: Load keys from storage
+        env:
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+          BING_SEARCH_KEY: ${{ secrets.BING_SEARCH_KEY }}
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+          NEWS_API_KEY: ${{ secrets.NEWS_API_KEY }}
+          GNEWS_API_KEY: ${{ secrets.GNEWS_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
+          HF_API_KEY: ${{ secrets.HF_API_KEY }}
+          REPLICATE_API_KEY: ${{ secrets.REPLICATE_API_KEY }}
+          COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          JUDGE0_API_KEY: ${{ secrets.JUDGE0_API_KEY }}
+          ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
+          EXCHANGERATE_API_KEY: ${{ secrets.EXCHANGERATE_API_KEY }}
+          UNSPLASH_API_KEY: ${{ secrets.UNSPLASH_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          STABILITY_API_KEY: ${{ secrets.STABILITY_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          WOLFRAM_API_KEY: ${{ secrets.WOLFRAM_API_KEY }}
+          DEEPL_API_KEY: ${{ secrets.DEEPL_API_KEY }}
+          IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
+          MAPBOX_API_KEY: ${{ secrets.MAPBOX_API_KEY }}
+          URLSCAN_API_KEY: ${{ secrets.URLSCAN_API_KEY }}
+          NOTION_API_KEY: ${{ secrets.NOTION_API_KEY }}
+          AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
+          SUPABASE_API_KEY: ${{ secrets.SUPABASE_API_KEY }}
+        run: |
+          mkdir -p "$STORAGE_DIR/keys"
+          SRC=""
+          for f in "$STORAGE_DIR/keys/secrets.env" "$STORAGE_DIR/secrets.env"; do
+            [ -f "$f" ] && SRC="$f" && break
+          done
+          if [ -z "$SRC" ]; then
+            SRC="$STORAGE_DIR/keys/secrets.env"
+            : > "$SRC"
+            for k in SERPER_API_KEY BRAVE_API_KEY BING_SEARCH_KEY OPENWEATHER_API_KEY \
+                     NEWS_API_KEY GNEWS_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY \
+                     GROQ_API_KEY TOGETHER_API_KEY HF_API_KEY REPLICATE_API_KEY \
+                     COHERE_API_KEY MISTRAL_API_KEY JUDGE0_API_KEY ALPHAVANTAGE_API_KEY \
+                     EXCHANGERATE_API_KEY UNSPLASH_API_KEY PEXELS_API_KEY STABILITY_API_KEY \
+                     ELEVENLABS_API_KEY TELEGRAM_BOT_TOKEN DISCORD_WEBHOOK_URL \
+                     SLACK_WEBHOOK_URL MAILGUN_API_KEY TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN \
+                     WOLFRAM_API_KEY DEEPL_API_KEY IPINFO_TOKEN MAPBOX_API_KEY \
+                     URLSCAN_API_KEY NOTION_API_KEY AIRTABLE_API_KEY SUPABASE_API_KEY; do
+              v="${!k}"
+              [ -n "$v" ] && echo "$k=$v" >> "$SRC"
+            done
+            echo "🔐 No keys in storage — imported $(wc -l < "$SRC") from Actions secrets (will be pushed to private repo)"
+          fi
+          LOADED=0
+          while IFS= read -r line || [ -n "$line" ]; do
+            case "$line" in
+              ""|"#"*) continue ;;
+              *=*) echo "$line" >> "$GITHUB_ENV"; LOADED=$((LOADED + 1)) ;;
+            esac
+          done < "$SRC"
+          echo "✅ Loaded $LOADED keys into env"
+
+      # ══ 7. INSTALL OLLAMA ════════════════════════════════════════════════
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.ai/install.sh | sh
+          nohup ollama serve > /tmp/ollama.log 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -sf http://127.0.0.1:11434/api/tags > /dev/null 2>&1; then
+              echo "✅ Ollama ready after ~$((i * 2))s"; break
+            fi
+            sleep 2
+          done
+          if ! curl -sf http://127.0.0.1:11434/api/tags > /dev/null 2>&1; then
+            echo "❌ Ollama failed to start"; tail -n 30 /tmp/ollama.log; exit 1
+          fi
+
+      # ══ 8. SINGLE-AGENT MODEL ════════════════════════════════════════════
+      - name: Restore single-agent model cache
+        id: cache-single
+        if: inputs.agent_mode == 'single'
+        uses: actions/cache@v5
+        with:
+          path: ~/.ollama
+          key: ollama-${{ inputs.model_single }}-v2
+          restore-keys: |
+            ollama-${{ inputs.model_single }}-
+
+      - name: Pull single-agent model
+        if: inputs.agent_mode == 'single' && steps.cache-single.outputs.cache-hit != 'true'
+        run: ollama pull ${{ inputs.model_single }}
+
+      - name: Warm up single-agent model
+        if: inputs.agent_mode == 'single' && steps.cache-single.outputs.cache-hit == 'true'
+        run: echo "hi" | timeout 60 ollama run ${{ inputs.model_single }} || true
+
+      # ══ 9. PLANNER MODEL (multi) ═════════════════════════════════════════
+      - name: Restore planner model cache
+        id: cache-planner
+        if: inputs.agent_mode == 'multi'
+        uses: actions/cache@v5
+        with:
+          path: ~/.ollama
+          key: ollama-${{ inputs.model_planner }}-v2
+          restore-keys: |
+            ollama-${{ inputs.model_planner }}-
+
+      - name: Pull planner model
+        if: inputs.agent_mode == 'multi' && steps.cache-planner.outputs.cache-hit != 'true'
+        run: ollama pull ${{ inputs.model_planner }}
+
+      # ══ 10. CODER MODEL (multi) ══════════════════════════════════════════
+      - name: Restore Bonsai 27B GGUF cache
+        id: cache-bonsai
+        if: inputs.agent_mode == 'multi' && inputs.model_coder == 'bonsai-27b'
+        uses: actions/cache@v5
+        with:
+          path: /tmp/bonsai-gguf
+          key: bonsai-27b-q1-v2
+
+      - name: Download Bonsai 27B GGUF
+        if: inputs.agent_mode == 'multi' && inputs.model_coder == 'bonsai-27b' && steps.cache-bonsai.outputs.cache-hit != 'true'
+        run: |
+          pip install -q huggingface_hub
+          mkdir -p /tmp/bonsai-gguf
+          python3 -c "
+          from huggingface_hub import hf_hub_download
+          path = hf_hub_download(
+              repo_id='prism-ml/Bonsai-27B-gguf',
+              filename='Bonsai-27B-Q1_0.gguf',
+              local_dir='/tmp/bonsai-gguf'
+          )
+          print(f'Downloaded: {path}')
+          "
+
+      - name: Register Bonsai 27B in Ollama
+        if: inputs.agent_mode == 'multi' && inputs.model_coder == 'bonsai-27b'
+        run: |
+          printf 'FROM /tmp/bonsai-gguf/Bonsai-27B-Q1_0.gguf\nSYSTEM "You are an expert software engineer specializing in writing clean, production-ready code."\nPARAMETER temperature 0.2\nPARAMETER top_p 0.9\nPARAMETER num_predict 4096\n' > /tmp/bonsai-modelfile
+          ollama create bonsai-27b -f /tmp/bonsai-modelfile
+          ollama list
+
+      - name: Pull generic coder model
+        if: inputs.agent_mode == 'multi' && inputs.model_coder != 'bonsai-27b'
+        run: ollama pull ${{ inputs.model_coder }}
+
+      # ══ 11. TARGET REPO CONTEXT ══════════════════════════════════════════
+      - name: Fetch target repo context
+        if: inputs.target_repo != ''
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          python3 read_repo.py "${{ inputs.target_repo }}" "$GH_TOKEN" 60000 > /tmp/repo_ctx_raw.txt 2>&1 || true
+          [ -f /tmp/repo_context.b64 ] && echo "✅ Context saved: $(wc -c < /tmp/repo_context.b64) bytes" || echo "⚠️ No context"
+
+      # ══ 12. RUN VIBE-CODE ════════════════════════════════════════════════
+      - name: Run VIBE-CODE
+        env:
+          PROMPT: "${{ inputs.prompt }}"
+          FILE_NAME: "${{ inputs.file_name }}"
+          MODE: "${{ inputs.mode }}"
+          AGENT_MODE: "${{ inputs.agent_mode }}"
+          ENABLE_TOOLS: "${{ inputs.enable_tools }}"
+          MODEL_PLANNER: "${{ inputs.model_planner }}"
+          MODEL_CODER: "${{ inputs.model_coder }}"
+          MODEL_SINGLE: "${{ inputs.model_single }}"
+          MAX_TOKENS: "${{ inputs.max_tokens }}"
+          ITERATIONS: "${{ inputs.iterations }}"
+          TOTAL_BUDGET: "${{ inputs.total_budget }}"
+          UNCENSORED: "${{ inputs.uncensored }}"
+          AUTO_PR: "${{ inputs.auto_pr }}"
+          AUTO_NOTES: "${{ inputs.auto_notes }}"
+          TARGET_REPO: "${{ inputs.target_repo }}"
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          STORAGE_DIR: /tmp/storage
+          STORAGE_REPO: ${{ inputs.storage_repo }}
+          CHAT_ID: run-${{ github.run_id }}
+        run: |
+          mkdir -p /tmp/vibe_output
+          python3 generate.py
+          EXIT_CODE=$?
+          echo "VIBE-CODE finished with exit code: $EXIT_CODE"
+          exit $EXIT_CODE
+
+      # ══ 13. SHOW RESULTS ═════════════════════════════════════════════════
+      - name: Show generated files
+        if: always()
+        run: |
+          ls -la /tmp/vibe_output/ 2>/dev/null || echo "(empty)"
+          cat /tmp/vibe_output/_budget_report.json 2>/dev/null | python3 -m json.tool || true
+          cat /tmp/vibe_output/_release_notes.md 2>/dev/null || echo "(no release notes)"
+
+      # ══ 14. COMMIT RESULTS (код + _run_summary.md для сайта) ═════════════
+      - name: Commit results to VIBE-CODE
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMIT_MSG: "feat(vibe): ${{ inputs.prompt }}"
+        run: |
+          git config user.name "VIBE-CODE Bot"
+          git config user.email "vibecode-bot@users.noreply.github.com"
+
+          FOLDER="results/run-${{ github.run_id }}"
+          mkdir -p "$FOLDER"
+
+          find /tmp/vibe_output -maxdepth 2 -type f ! -name '_*' -exec cp {} "$FOLDER/" \; 2>/dev/null || true
+          for f in _release_notes.md _tools_status.json _progress.json _reasoning.json _budget_report.json; do
+            cp "/tmp/vibe_output/$f" "$FOLDER/" 2>/dev/null || true
+          done
+
+          # ── сайт строит карточку сообщения из этого файла ────────────────
+          cat > "$FOLDER/_run_summary.md" << SUMMARY
+          # VIBE-CODE Run Summary
+
+          | Field | Value |
+          |-------|-------|
+          | **Run ID** | \`${{ github.run_id }}\` |
+          | **Prompt** | ${{ inputs.prompt }} |
+          | **Mode** | ${{ inputs.agent_mode }} |
+          | **Budget** | ${{ inputs.total_budget }} tokens |
+          | **Max tokens** | ${{ inputs.max_tokens }} |
+          | **Iterations** | ${{ inputs.iterations }} |
+          | **Tools** | ${{ inputs.enable_tools }} |
+          | **Planner** | ${{ inputs.model_planner }} |
+          | **Coder** | ${{ inputs.model_coder }} |
+          | **Single** | ${{ inputs.model_single }} |
+          | **Timestamp** | $(date -u +"%Y-%m-%d %H:%M UTC") |
+
+          ## 📦 Download result (ZIP)
+          Artifacts available at:
+          https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SUMMARY
+
+          python3 -m pip install -q pyyaml || true
+          python3 update_token_stats.py || echo "⚠️ token stats update failed"
+
+          git add "$FOLDER" token_usage.yaml README.md
+          if git diff --staged --quiet; then
+            echo "Nothing to commit — outputs empty or unchanged"
+          else
+            echo "$COMMIT_MSG" > /tmp/commit_msg.txt
+            git commit -F /tmp/commit_msg.txt
+            git push
+            echo "✅ Results committed to $FOLDER"
+          fi
+
+      # ══ 15. STORAGE: PUSH чатов + ключей в приватный репо ════════════════
+      - name: Push chats to storage
+        if: always()
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          STORAGE_REPO: ${{ inputs.storage_repo }}
+        run: |
+          python3 sync_storage.py push && echo "✅ Storage pushed" \
+            || echo "⚠️ Storage push failed"
+
+      # ══ 16. ARTIFACT (без ключей и чатов) ═════════════════════════════════
+      - name: Upload output as artifact
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: vibe-output-${{ github.run_id }}
+          path: /tmp/vibe_output/
+          retention-days: 30
+
+      # ══ 17. OLLAMA LOGS ON FAILURE ═══════════════════════════════════════
+      - name: Print Ollama logs on failure
+        if: failure()
+        run: tail -50 /tmp/ollama.log 2>/dev/null || echo "(no logs)"
